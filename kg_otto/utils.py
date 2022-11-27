@@ -38,6 +38,6 @@ def convert_to_listval(df: pd.DataFrame):
     return df
 
 
-def eval(pred, truth):
+def do_eval(pred, truth):
     pass
 
