@@ -4,7 +4,8 @@ import pandas as pd
 TYPE_TO_ID = {
     "clicks": 0,
     "carts": 1,
-    "orders": 2
+    "orders": 2,
+    "final": 3
 }
 
 ID_TO_TYPE = {v: k for k, v in TYPE_TO_ID.items()}
@@ -63,9 +64,11 @@ def do_eval(pred, test_labels):
     it = iter_row_values(merged, ['ground_truth', 'aid'])
     hits = pd.Series([len(y_true.intersection(y_pred)) for y_true, y_pred in it], index=merged.index)
 
-    recall = hits.groupby(merged.type).sum() / merged.ground_truth_len.clip(upper=20).groupby(merged.type).sum()
+    do_grp = lambda x: x.clip(upper=20).groupby(merged.type).sum()
+    recall = do_grp(hits) / do_grp(merged.ground_truth_len)
+
     score = (recall * pd.Series([0.10, 0.30, 0.60])).sum()
-    recall[3] = score
+    recall[TYPE_TO_ID["final"]] = score
     return recall
 
 
