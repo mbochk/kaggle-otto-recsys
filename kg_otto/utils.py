@@ -1,6 +1,8 @@
 from operator import itemgetter
 import pandas as pd
 
+from kg_otto.iter import iter_row_values
+
 TYPE_TO_ID = {
     "clicks": 0,
     "carts": 1,
@@ -9,12 +11,6 @@ TYPE_TO_ID = {
 }
 
 ID_TO_TYPE = {v: k for k, v in TYPE_TO_ID.items()}
-
-
-def iter_row_values(df, cols=None):
-    cols = cols or list(df.columns)
-    values = [df[col] for col in cols]
-    yield from zip(*values)
 
 
 def read_from_jsonl(data_path):
@@ -87,3 +83,7 @@ def submission_to_pred(path):
     df = pd.DataFrame(vals, columns=['session', 'type', 'aid'])
     df.sort_values(['session', 'type'], inplace=True, ignore_index=True)
     return df
+
+
+def coo_to_pd(coo):
+    return pd.concat(map(pd.Series, [coo.row, coo.col, coo.data]), axis=1)

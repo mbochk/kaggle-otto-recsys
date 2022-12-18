@@ -33,6 +33,7 @@ class ImplicitPred:
             x = x.groupby([SESSION_COL, ITEM_COL], as_index=False).ts.agg('count')
             ij = self.encoder.fit_transform(x[[SESSION_COL, ITEM_COL]])
             c = coo_matrix((x.ts.astype('float'), list(ij.T)))
+            self.coo = c
         else:
             c = x
         logging.info("Start implicit model fit")
@@ -54,7 +55,7 @@ class ImplicitPred:
 
         with Pool(processes=self.PARALLEL) as pool:
             logging.info(f"Apply aggregation in multiprocessing")
-            predict = pool.map(predict_apply, data_rows)
+            predict = pool.map(predict_apply, data_rows, chunksize=10000)
         del sim
 
         x = pd.DataFrame(x)
