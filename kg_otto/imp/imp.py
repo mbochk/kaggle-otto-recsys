@@ -9,6 +9,8 @@ from sklearn.preprocessing import OrdinalEncoder
 
 from kg_otto.config import SESSION_COL, ITEM_COL, SCORE_COL
 
+from kg_otto.utils import iter_tqdm, add_types
+
 wgt2cls = {
     "item": ItemItemRecommender,
     "cos": CosineRecommender,
@@ -39,33 +41,42 @@ class ImplicitPred:
         logging.info("Start implicit model fit")
         self.model.fit(c)
 
-    def predict(self, x):
+    def _parallel_predict(self, data_rows, parallel):
+        global sim
+        sim = self.model.similarity
+        if isinstance(parallel, bool):
+            parallel = self.PARALLEL
+
+        with Pool(processes=parallel) as pool:
+            logging.info(f"Apply aggregation in multiprocessing")
+            iter_res = pool.imap(predict_apply, data_rows, chunksize=1000)
+            res = iter_tqdm(iter_res, len(data_rows))
+        del sim
+        return res
+
+    def predict(self, x, parallel=True, types=None):
         x = x.copy()
         logging.info("Transform data for prediction")
         ij = self.encoder.transform(x[[SESSION_COL, ITEM_COL]])
         x['item_index'] = ij[:, 1]
         x = x[x.item_index != self.UNK_VALUE]
         x = x.groupby(SESSION_COL).item_index.apply(set)
-        x.method = self.u2i_agg
 
-        data_rows = ((val, self.u2i_agg, self.top_k) for val in x.values)
-
-        global sim
-        sim = self.model.similarity
-
-        with Pool(processes=self.PARALLEL) as pool:
-            logging.info(f"Apply aggregation in multiprocessing")
-            predict = pool.map(predict_apply, data_rows, chunksize=10000)
-        del sim
+        data_rows = [(val, self.u2i_agg, self.top_k) for val in x.values]
+        if parallel:
+            predict = self._parallel_predict(data_rows, parallel=parallel)
+        else:
+            predict = [predict_apply(row, self.model.similarity) for row in data_rows]
 
         x = pd.DataFrame(x)
         x["predict"] = predict
         x = x.explode("predict")
-        from operator import itemgetter
-        x[ITEM_COL] = x["predict"].apply(itemgetter(0)).astype(int)
-        x[SCORE_COL] = x["predict"].apply(itemgetter(1))
-        x = x[[ITEM_COL, SCORE_COL]].reset_index()
-        return x
+        items = x.iloc[0::2].explode("predict").reset_index()
+        items.rename(columns=dict(predict=ITEM_COL), inplace=True)
+        items[ITEM_COL] = items[ITEM_COL].astype(int)
+        items[SCORE_COL] = x.iloc[1::2].explode("predict")["predict"].values
+        items = items[[SESSION_COL, ITEM_COL, SCORE_COL]]
+        return add_types(items)
 
 
 def max_aggr(rows, sim, top_k):
@@ -80,8 +91,11 @@ def sum_aggr(rows, sim, top_k):
     return v.indices[index], v.data[index]
 
 
-def predict_apply(data):
-    global sim
+def predict_apply(data, ssim=None):
+    if ssim is None:
+        global sim
+    else:
+        sim = ssim
     rows, u2i_agg, top_k = data
     if u2i_agg == "max":
         return max_aggr(rows, sim, top_k)

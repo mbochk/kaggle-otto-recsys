@@ -1,4 +1,6 @@
+import tqdm
 from operator import itemgetter
+import numpy as np
 import pandas as pd
 
 from kg_otto.iter import iter_row_values
@@ -56,6 +58,7 @@ def convert_to_listval(df: pd.DataFrame):
 
 def do_eval(pred, test_labels):
     merged = pd.merge_ordered(test_labels, convert_to_listval(pred), how='left', on=['session', 'type'])
+    merged.aid = merged.aid.apply(lambda x: x if isinstance(x, list) else [])
 
     it = iter_row_values(merged, ['ground_truth', 'aid'])
     hits = pd.Series([len(y_true.intersection(y_pred)) for y_true, y_pred in it], index=merged.index)
@@ -86,4 +89,22 @@ def submission_to_pred(path):
 
 
 def coo_to_pd(coo):
-    return pd.concat(map(pd.Series, [coo.row, coo.col, coo.data]), axis=1)
+    df = pd.concat(map(pd.Series, [coo.row, coo.col, coo.data]), axis=1)
+    df.columns = ["row", "col", "data"]
+    return df
+
+
+def iter_tqdm(iter_res, total=None):
+    results = []
+    with tqdm.tqdm(total=total) as timer:
+        for res in iter_res:
+            results.append(res)
+            timer.update()
+    return results
+
+
+def add_types(df, types=None):
+    if types is None:
+        types = (0, 1, 2)
+    data = [df for _ in types]
+    return pd.concat(data, keys=types, names=['type']).reset_index(level=0).reset_index(drop=True)
