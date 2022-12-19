@@ -31,7 +31,7 @@ for cf_type in wgt2cls.keys():
         coo_to_pd(sim).to_parquet(name + '.parquet')
 
         pred = imp.predict(test_df, parallel=6)
-        pred.to_csv(f"predict_{name}.csv")
+        pred.to_csv(f"predict_{name}.csv", index=False)
 
         print(name)
         print(do_eval(pred, test_labels))
