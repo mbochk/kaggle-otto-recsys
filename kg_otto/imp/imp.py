@@ -9,7 +9,8 @@ from sklearn.preprocessing import OrdinalEncoder
 
 from kg_otto.config import SESSION_COL, ITEM_COL, SCORE_COL
 
-from kg_otto.utils import iter_tqdm, add_types
+from kg_otto.utils import add_types
+from kg_otto.iter import iter_tqdm
 
 wgt2cls = {
     "item": ItemItemRecommender,

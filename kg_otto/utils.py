@@ -1,6 +1,4 @@
-import tqdm
 from operator import itemgetter
-import numpy as np
 import pandas as pd
 
 from kg_otto.iter import iter_row_values
@@ -41,13 +39,13 @@ def pred_to_pred_list(pred: pd.DataFrame, col='aid'):
     last = pred[['session', 'type']].drop_duplicates(keep='last')
 
     pred_vals = pred[col].values.tolist()
-    aid_list = [pred_vals[start:end+1] for start, end in zip(first.index, last.index) ]
+    aid_list = [pred_vals[start:end+1] for start, end in zip(first.index, last.index)]
     first.reset_index(drop=True, inplace=True)
     first[col] = aid_list
     return first
 
 
-def convert_to_listval(df: pd.DataFrame):
+def convert_to_list_val(df: pd.DataFrame):
     if df.dtypes['type'] == 'O':
         df['type'] = df['type'].map(TYPE_TO_ID)
         df.sort_values(['session', 'type'], inplace=True)
@@ -57,13 +55,14 @@ def convert_to_listval(df: pd.DataFrame):
 
 
 def do_eval(pred, test_labels):
-    merged = pd.merge_ordered(test_labels, convert_to_listval(pred), how='left', on=['session', 'type'])
+    merged = pd.merge_ordered(test_labels, convert_to_list_val(pred), how='left', on=['session', 'type'])
     merged.aid = merged.aid.apply(lambda x: x if isinstance(x, list) else [])
 
     it = iter_row_values(merged, ['ground_truth', 'aid'])
     hits = pd.Series([len(y_true.intersection(y_pred)) for y_true, y_pred in it], index=merged.index)
 
-    do_grp = lambda x: x.clip(upper=20).groupby(merged.type).sum()
+    def do_grp(x):
+        return x.clip(upper=20).groupby(merged.type).sum()
     recall = do_grp(hits) / do_grp(merged.ground_truth_len)
 
     score = (recall * pd.Series([0.10, 0.30, 0.60])).sum()
@@ -92,15 +91,6 @@ def coo_to_pd(coo):
     df = pd.concat(map(pd.Series, [coo.row, coo.col, coo.data]), axis=1)
     df.columns = ["row", "col", "data"]
     return df
-
-
-def iter_tqdm(iter_res, total=None):
-    results = []
-    with tqdm.tqdm(total=total) as timer:
-        for res in iter_res:
-            results.append(res)
-            timer.update()
-    return results
 
 
 def add_types(df, types=None):
