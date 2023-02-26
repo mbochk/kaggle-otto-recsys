@@ -51,7 +51,7 @@ class ImplicitPred:
         with Pool(processes=parallel) as pool:
             logging.info(f"Apply aggregation in multiprocessing")
             iter_res = pool.imap(predict_apply, data_rows, chunksize=1000)
-            res = iter_tqdm(iter_res, len(data_rows))
+            res = iter_tqdm(iter_res, total=len(data_rows), smoothing=0)
         del sim
         return res
 
