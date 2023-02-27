@@ -1,4 +1,5 @@
 import os
+import shutil
 
 from kg_otto.partitioned import PartitionedDataFrame
 from kg_otto.imp.i2i_max import all_i2i_count
@@ -10,10 +11,10 @@ def main():
 
     p_train = PartitionedDataFrame(train)
     if predict in os.listdir():
-        return
-    else:
-        os.mkdir(predict)
-        output = PartitionedDataFrame(predict)
+        shutil.rmtree(predict, ignore_errors=True)
+
+    os.mkdir(predict)
+    output = PartitionedDataFrame(predict)
 
     p_train.mp_apply(all_i2i_count, output)
 

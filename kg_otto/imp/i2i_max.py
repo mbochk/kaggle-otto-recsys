@@ -31,73 +31,61 @@ def all_i2i_count(df):
 
 
 def collect_total_predict(train, predict):
-    p_train = PartitionedDataFrame(train)
-    if predict in os.listdir():
-        output = PartitionedDataFrame(predict)
-    else:
-        output = PartitionedDataFrame(predict)
-        output.create()
-        p_train.mp_apply(all_i2i_count, output)
-    return output
+    p_train, p_predict = PartitionedDataFrame(train), PartitionedDataFrame(predict)
+    p_predict_tmp = PartitionedDataFrame(predict + '_tmp')
+
+    def merge(df):
+        df = df.groupby(["aid", "aid2"], as_index=False).sum()
+        df.sort_values(["aid", "score"], ascending=[True, False], inplace=True)
+        df['rank'] = df.groupby("aid").score.rank(method='first', ascending=False).astype('int')
+        return df
+
+    def repartition(df):
+        df['aid_pt'] = df.aid // 18000
+        return df
+
+    p_train.mp_apply(all_i2i_count, p_predict_tmp)
+    p_predict_tmp.repartition(repartition, key='aid_pt', merge_func=merge)
+
+    return predict
 
 
-def collect_i2i_v2(part_predict):
-    from operator import itemgetter
-    from kg_otto.data import get_test
+def op_aggregate(truth, data, source, op=sum):
+    getter = itemgetter(*data)
+    agg = {int(tr): getter(source[tr]) for tr in truth}
+    agg = {tr: int(op(val)) if isinstance(val, tuple) else int(val)
+           for tr, val in agg.items()}
+    return agg
+
+
+def all_eval_score(df):
+    source = defaultdict(Counter)
+    for aid, aid2, score in iter_row_values(df.reset_index(), cols=['aid', 'aid2', 'score']):
+        source[aid][aid2] = score
+
     test_labels = get_test(merge_test=True)
-
-    truth_counts = test_labels.ground_truth.apply(lambda x: Counter()).tolist()
-    data_iter = list(iter_row_values(test_labels, cols=['ground_truth', 'data']))
-
-    p_pred = PartitionedDataFrame(part_predict)
-
-    for pt in tqdm(p_pred.partitions):
-        logging.info(f"Read {pt}")
-        df = p_pred.get_df(pt)
-
-        logging.info("Make i2i")
-        i2i = defaultdict(Counter)
-        for aid, aid2, score in iter_row_values(df):
-            i2i[aid][aid2] += score
-
-        logging.info("Start summing")
-        for (truth, data), tcount in zip(data_iter, truth_counts):
-            op = itemgetter(*data)
-            tr_count = {int(tr): op(i2i[tr]) for tr in truth}
-            tr_count = {tr: int(sum(val)) if isinstance(val, tuple) else int(val)
-                        for tr, val in tr_count.items()}
-            tcount.update(tr_count)
-    return test_labels, truth_counts
-
-
-def all_i2i_val(df):
-    test_labels = get_test(merge_test=True)
-
-    i2i = defaultdict(Counter)
-    for aid, aid2, score in iter_row_values(df):
-        i2i[aid][aid2] += score
-
-    truth_counts = test_labels.ground_truth.apply(lambda x: Counter()).tolist()
     data_iter = iter_row_values(test_labels, cols=['ground_truth', 'data'])
+    score_sum = [op_aggregate(truth, data, source, op=sum) for truth, data in data_iter]
 
-    for (truth, data), tcount in zip(data_iter, truth_counts):
-        op = itemgetter(*data)
-        tr_count = {int(tr): op(i2i[tr]) for tr in truth}
-        tr_count = {tr: int(sum(val)) if isinstance(val, tuple) else int(val)
-                    for tr, val in tr_count.items()}
-        tcount.update(tr_count)
-
-    test_labels['aid'] = truth_counts
+    test_labels['aid'] = score_sum
     val = test_labels[['session', 'type', 'aid']].explode('aid')
     val['score'] = test_labels[['aid']].applymap(lambda x: x.values()).explode("aid").values
     return val
 
 
-def collect_i2i_eval(predict, val):
-    p_pred = PartitionedDataFrame(predict)
-    p_val = PartitionedDataFrame(val)
-    p_val.create()
-    p_pred.mp_apply(all_i2i_val, p_val)
+def all_eval_ranks(df):
+    source = defaultdict(lambda: defaultdict(lambda: 10**10))
+    for aid, aid2, rank in iter_row_values(df.reset_index(), cols=['aid', 'aid2', 'rank']):
+        source[aid][aid2] = rank
+
+    test_labels = get_test(merge_test=True)
+    data_iter = iter_row_values(test_labels, cols=['ground_truth', 'data'])
+    rank_min = [op_aggregate(truth, data, source, op=min) for truth, data in data_iter]
+
+    test_labels['aid'] = rank_min
+    val = test_labels[['session', 'type', 'aid']].explode('aid')
+    val['score'] = test_labels[['aid']].applymap(lambda x: x.values()).explode("aid").values
+    return val
 
 
 def main():
