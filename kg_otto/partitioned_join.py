@@ -13,10 +13,10 @@ class I2iDatasetJoiner:
         test_df, labels = get_test(path=self.test_path, merge_test=False)
         test_df = test_df[['session', 'aid']].drop_duplicates()
         labels = labels[labels.type == 0][
-            ['session', 'ground_truth']
-        ].explode('ground_truth')
+            ['session', 'truth']
+        ].explode('truth')
         labels['target'] = 1
-        labels.rename({"ground_truth": "aid2"}, axis=1, inplace=True)
+        labels.rename({"truth": "aid2"}, axis=1, inplace=True)
         return test_df, labels
 
     def __call__(self, df):
@@ -37,5 +37,6 @@ class I2iDatasetJoiner:
         # join truth
         df = pd.merge(df, labels, on=['session', 'aid2'], how='left')
         df['target'] = df['target'].fillna(0)
-        df.sort_values('session')
+        df.sort_values('session', inplace=True)
+        df.rename({"aid2": "aid"}, axis=1, inplace=True)
         return df
