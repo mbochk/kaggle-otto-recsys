@@ -1,15 +1,14 @@
-import os
 import logging
 import pandas as pd
 
 from collections import defaultdict, Counter
-from tqdm import tqdm
 from operator import itemgetter
 
 from kg_otto.data import get_test
 from kg_otto import set_log_level
 from kg_otto.iter import gen_grp, iter_row_values
 from kg_otto.partitioned import PartitionedDataFrame
+from kg_otto.config import TRUTH_COL
 
 
 def all_i2i_count(df):
@@ -45,7 +44,7 @@ def collect_total_predict(train, predict):
         return df
 
     p_train.mp_apply(all_i2i_count, p_predict_tmp)
-    p_predict_tmp.repartition(repartition, key='aid_pt', merge_func=merge)
+    p_predict_tmp.repartition(repartition, key='aid_pt', merge_func=merge, output=p_predict)
 
     return predict
 
@@ -64,7 +63,7 @@ def all_eval_score(df):
         source[aid][aid2] = score
 
     test_labels = get_test(merge_test=True)
-    data_iter = iter_row_values(test_labels, cols=['ground_truth', 'data'])
+    data_iter = iter_row_values(test_labels, cols=[TRUTH_COL, 'data'])
     score_sum = [op_aggregate(truth, data, source, op=sum) for truth, data in data_iter]
 
     test_labels['aid'] = score_sum
@@ -79,7 +78,7 @@ def all_eval_ranks(df):
         source[aid][aid2] = rank
 
     test_labels = get_test(merge_test=True)
-    data_iter = iter_row_values(test_labels, cols=['ground_truth', 'data'])
+    data_iter = iter_row_values(test_labels, cols=[TRUTH_COL, 'data'])
     rank_min = [op_aggregate(truth, data, source, op=min) for truth, data in data_iter]
 
     test_labels['aid'] = rank_min

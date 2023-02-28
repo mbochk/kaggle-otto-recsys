@@ -2,6 +2,9 @@ from operator import itemgetter
 import pandas as pd
 
 from kg_otto.iter import iter_row_values
+from kg_otto.config import TRUTH_COL
+
+TRUTH_LEN_COL = TRUTH_COL + '_len'
 
 TYPE_TO_ID = {
     "clicks": 0,
@@ -25,8 +28,8 @@ def read_from_jsonl(data_path):
 def read_test_labels(data_path, src='parquet'):
     if src == 'parquet':
         df = pd.read_parquet(data_path)
-        df['ground_truth'] = df['ground_truth'].apply(set)
-        df['ground_truth_len'] = df['ground_truth'].apply(len)
+        df[TRUTH_COL] = df[TRUTH_COL].apply(set)
+        df[TRUTH_LEN_COL] = df[TRUTH_COL].apply(len)
         df['type'] = df['type'].map(TYPE_TO_ID).astype('uint8')
     else:
         raise ValueError
@@ -58,12 +61,12 @@ def do_eval(pred, test_labels):
     merged = pd.merge_ordered(test_labels, convert_to_list_val(pred), how='left', on=['session', 'type'])
     merged.aid = merged.aid.apply(lambda x: x if isinstance(x, list) else [])
 
-    it = iter_row_values(merged, ['ground_truth', 'aid'])
+    it = iter_row_values(merged, [TRUTH_COL, 'aid'])
     hits = pd.Series([len(y_true.intersection(y_pred)) for y_true, y_pred in it], index=merged.index)
 
     def do_grp(x):
         return x.clip(upper=20).groupby(merged.type).sum()
-    recall = do_grp(hits) / do_grp(merged.ground_truth_len)
+    recall = do_grp(hits) / do_grp(merged[TRUTH_LEN_COL])
 
     score = (recall * pd.Series([0.10, 0.30, 0.60])).sum()
     recall[TYPE_TO_ID["final"]] = score

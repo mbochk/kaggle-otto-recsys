@@ -2,6 +2,8 @@
 SESSION_COL = "session"
 ITEM_COL = "aid"
 SCORE_COL = "score"
+TRUTH_COL = "truth"
+DATA_COL = "data"
 
 T = 1000
 HT = 100_000
