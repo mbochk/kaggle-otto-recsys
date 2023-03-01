@@ -1,4 +1,4 @@
-from kg_otto import set_log_level, pd
+import pandas as pd
 from kg_otto.utils import read_test_labels
 from pathlib import Path
 import logging
@@ -26,6 +26,7 @@ def get_test(path=DEFAULT_PATH, merge_test=True):
 
 
 def get_data(path=DEFAULT_PATH, merge_test=False):
+    from kg_otto import set_log_level
     set_log_level(20)
     data_path = Path(path)
 

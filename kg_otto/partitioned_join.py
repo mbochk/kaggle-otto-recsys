@@ -34,6 +34,8 @@ class I2iDatasetJoiner:
             "score": "sum", "rank": "min"
         })
 
+        # filter by features
+
         # join truth
         df = pd.merge(df, labels, on=['session', 'aid2'], how='left')
         df['target'] = df['target'].fillna(0)
